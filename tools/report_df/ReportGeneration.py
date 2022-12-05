@@ -1,22 +1,24 @@
+import os
+import errno
 import jinja2
 import MatplotlibPlotter
 from Metric import Metric
-import os
-import errno
+import Constants
+
 
 def generate_main_page(bd, base, env, **kwargs):
     def pp_time(time):
-        if time < 60:
+        if time < Constants.TIME_M:
             return '%.fs' % time
-        if time < (60 * 60):
-            return '%.fm' % (time // 60)
-        if time < (24 * 60 * 60):
-            return '%.fh' % (time // (60 * 60))
-        if time < (7 * 24 * 60 * 60):
-            return '%.fd' % (time // (24 * 60 * 60))
-        if time < (30 * 24 * 60 * 60):
-            return '%.fw' % (time // (7 * 24 * 60 * 60))
-        return '%.fM' % (time // (30 * 24 * 60 * 60))
+        if time < Constants.TIME_H:
+            return '%.fm' % (time // Constants.TIME_M)
+        if time < Constants.TIME_D:
+            return '%.fh' % (time // Constants.TIME_H)
+        if time < Constants.TIME_W:
+            return '%.fd' % (time // Constants.TIME_D)
+        if time < Constants.TIME_T:
+            return '%.fw' % (time // Constants.TIME_W)
+        return '%.fM' % (time // Constants.TIME_T)
 
     template = env.get_template('main_template.md')
 

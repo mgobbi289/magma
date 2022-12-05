@@ -1,18 +1,20 @@
-from Metric import Metric
-from BenchmarkData import BenchmarkData
-import DataProcessing
-from matplotlib.lines import Line2D
-import matplotlib
-from matplotlib import colors
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
+import os
+import re
 import numpy as np
+import pandas as pd
 import seaborn as sns
 import scikit_posthocs as sp
-import pandas as pd
-import os
+import matplotlib
+from matplotlib import colors
+from matplotlib.lines import Line2D
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 from copy import deepcopy
-import re
+import DataProcessing
+from Metric import Metric
+from BenchmarkData import BenchmarkData
+import Constants
+
 
 def expected_time_to_trigger(bd, outdir):
     """
@@ -494,19 +496,19 @@ def list_ticks(bound):
     return ticks
 
 def pp_time(time):
-    if np.isnan(time) :
+    if np.isnan(time):
         return time
-    if time < 60:
+    if time < Constants.TIME_M:
         return '%.fs' % time
-    if time < (60 * 60):
-        return '%.fm' % (time // 60)
-    if time < (24 * 60 * 60):
-        return '%.fh' % (time // (60 * 60))
-    if time < (7 * 24 * 60 * 60):
-        return '%.fd' % (time // (24 * 60 * 60))
-    if time < (30 * 24 * 60 * 60):
-        return '%.fw' % (time // (7 * 24 * 60 * 60))
-    return '%.fM' % (time // (30 * 24 * 60 * 60))
+    if time < Constants.TIME_H:
+        return '%.fm' % (time // Constants.TIME_M)
+    if time < Constants.TIME_D:
+        return '%.fh' % (time // Constants.TIME_H)
+    if time < Constants.TIME_W:
+        return '%.fd' % (time // Constants.TIME_D)
+    if time < Constants.TIME_T:
+        return '%.fw' % (time // Constants.TIME_W)
+    return '%.fM' % (time // Constants.TIME_T)
 
 def output(outdir, klass, label):
     name = os.path.join(klass, label)

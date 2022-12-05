@@ -6,7 +6,6 @@ from pandas import DataFrame
 from collections import Mapping, Iterable
 import Constants
 
-INDEX_NAMES = ['Fuzzer', 'Target','Program','Campaign','Metric','BugID']
 
 # TODO add retrieval of experiment information (Campaign duration)
 class BenchmarkData:
@@ -62,7 +61,7 @@ class BenchmarkData:
         # change column label from range to regular index
         df.rename(columns={0: 'Time'}, inplace=True)
         # change index names
-        df.rename_axis(index=INDEX_NAMES, inplace=True)
+        df.rename_axis(index=Constants.INDEX_NAMES, inplace=True)
         # sorting for later performance gain
         self._df = df.sort_index()
 
@@ -87,10 +86,10 @@ class BenchmarkData:
         return self._version
 
     def get_all_fuzzers(self):
-        return list(self._df.index.get_level_values('Fuzzer').unique())
+        return list(self._df.index.get_level_values(Constants.INDEX_F).unique())
 
     def get_all_targets(self):
-        return list(self._df.index.get_level_values('Target').unique())
+        return list(self._df.index.get_level_values(Constants.INDEX_T).unique())
 
     def get_all_metrics(self):
-        return list(self._df.index.get_level_values('Metric').unique())
+        return list(self._df.index.get_level_values(Constants.INDEX_M).unique())
