@@ -116,6 +116,7 @@ def generate_monitor_df(dumpdir, campaign):
 
     # use a list in case pd.DataFrame() can pre-allocate ahead of time
     rows = list(row_generator())
+    df = pd.DataFrame(rows)
     if len(rows) == 0:
         workdir, _, fuzzer, target, program, run = path_split_last(campaign, 5)
         name = f"{fuzzer}/{target}/{program}/{run}"
@@ -125,11 +126,11 @@ def generate_monitor_df(dumpdir, campaign):
             "%s contains no monitor logs. Check the corresponding campaign "
             "log file for more information: %s", name, logfile
         )
-
-    df = pd.DataFrame(rows)
-    df.set_index('TIME', inplace=True)
-    df.fillna(0, inplace=True)
-    df = df.astype(int)
+    else:
+        # Only when there are rows to work from
+        df.set_index('TIME', inplace=True)
+        df.fillna(0, inplace=True)
+        df = df.astype(int)
     del rows
     return df
 
