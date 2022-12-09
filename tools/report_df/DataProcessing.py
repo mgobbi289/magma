@@ -8,7 +8,7 @@ from lifelines import KaplanMeierFitter
 from lifelines.utils import restricted_mean_survival_time
 from Metric import Metric
 from BenchmarkData import BenchmarkData
-import Constants
+from Features import *
 
 
 def average_time_to_metric_data(bd,metric):
@@ -22,7 +22,7 @@ def average_time_to_metric_data(bd,metric):
 
     #Select only bugs that satisfy the metric and then calculate the mean time by grouping
     df = bd.get_frame()
-    average_time = df.iloc[df.index.get_level_values(Constants.INDEX_M) == metric].mean(level=Constants.GROUP_FTP)
+    average_time = df.iloc[df.index.get_level_values(METRIC) == metric].mean(level=FEATs_FTP)
     return average_time
 
 def expected_time_to_trigger_data(bd):
@@ -62,40 +62,40 @@ def expected_time_to_trigger_data(bd):
 
 
     df = bd.frame
-    df_triggered = df[df.index.get_level_values(Constants.INDEX_M) == Metric.TRIGGERED.value]
-    t = df_triggered.groupby(Constants.GROUP_FTPB)['Time'].mean()
-    M = df_triggered.groupby(Constants.GROUP_FTPB)['Time'].count()
-    N_raw = df.reset_index().groupby(Constants.GROUP_FTP)['Campaign'].nunique()
+    df_triggered = df[df.index.get_level_values(METRIC) == Metric.TRIGGERED.value]
+    t = df_triggered.groupby(FEATs_FTPB)[TIME].mean()
+    M = df_triggered.groupby(FEATs_FTPB)[TIME].count()
+    N_raw = df.reset_index().groupby(FEATs_FTP)[CAMPAIGN].nunique()
     N = N_raw.reindex_like(M)
-    df_ett = expected_time_to_bug(N,M,t).groupby(Constants.GROUP_FTB).min().droplevel(1).unstack().transpose()
+    df_ett = expected_time_to_bug(N,M,t).groupby(FEATs_FTB).min().droplevel(1).unstack().transpose()
 
     #Aggregate time computation
     #NOT COMPLETE
     #Extracting the program for which the bug did best
-    prog_bug = expected_time_to_bug(N,M,t).reset_index(name='Time')
-    prog_bug = prog_bug.loc[prog_bug.groupby(Constants.GROUP_FTB)['Time'].idxmin()]
-    prog_bug = prog_bug.set_index(Constants.GROUP_FTPB)
+    prog_bug = expected_time_to_bug(N,M,t).reset_index(name=TIME)
+    prog_bug = prog_bug.loc[prog_bug.groupby(FEATs_FTB)[TIME].idxmin()]
+    prog_bug = prog_bug.set_index(FEATs_FTPB)
 
     #Computing the average time to trigger bug over all fuzzers and libraries including all programs
-    M_agg = df_triggered.groupby(Constants.GROUP_FTPB)['Time'].count()
-    t_agg = df_triggered.groupby(Constants.GROUP_FTPB)['Time'].sum()
+    M_agg = df_triggered.groupby(FEATs_FTPB)[TIME].count()
+    t_agg = df_triggered.groupby(FEATs_FTPB)[TIME].sum()
 
     #Only considering the program where the bug did best
     M_agg = M_agg[M_agg.index.isin(prog_bug.index)]
     t_agg = t_agg[t_agg.index.isin(prog_bug.index)]
-    M_agg = M_agg.groupby(Constants.INDEX_B).sum()
-    t_agg = t_agg.groupby(Constants.INDEX_B).sum() / M_agg
+    M_agg = M_agg.groupby(BUG_ID).sum()
+    t_agg = t_agg.groupby(BUG_ID).sum() / M_agg
 
     #Counting the number of campaigns for each bug in every program,target and fuzzer
     def count_campaigns(group):
-        target = next(iter(group.groupby([Constants.INDEX_T, Constants.INDEX_P]).groups.keys()))
+        target = next(iter(group.groupby([TARGET, PROGRAM]).groups.keys()))
         sum = 0
         for fuzzer in N_raw.index.levels[0]:
             idx = (fuzzer, *target)
             if idx in N_raw:
                 sum += N_raw.loc[idx]
         return sum
-    N_agg = prog_bug.groupby(Constants.INDEX_B).apply(count_campaigns)
+    N_agg = prog_bug.groupby(BUG_ID).apply(count_campaigns)
 
     agg = expected_time_to_bug(N_agg,M_agg,t_agg)
     agg = agg.sort_values()
@@ -120,7 +120,7 @@ def unique_bugs_per_target_data(bd, metric):
 
         #For every fuzzer we gather in a list the number of times a bug was found
         #Entry 0 in the list is for campaign 0
-        fuzzer_data = series.groupby(Constants.INDEX_F).apply(list)
+        fuzzer_data = series.groupby(FUZZER).apply(list)
         fuzzer_label = fuzzer_data.index.tolist()
         #Constructing the index from the cross product of the fuzzer_label
         #The index has already the shape of the targeted p_value dataframe
@@ -143,25 +143,25 @@ def unique_bugs_per_target_data(bd, metric):
             return ss.mannwhitneyu(fuzzer_data[f1],fuzzer_data[f2], alternative='two-sided').pvalue
 
     df = bd.frame
-    df = df.iloc[df.index.get_level_values(Constants.INDEX_M) == metric]
+    df = df.iloc[df.index.get_level_values(METRIC) == metric]
     #Extract the number of unique bugs per campaign
-    unique_bugs = df.reset_index().groupby([Constants.INDEX_F,Constants.INDEX_T,Constants.INDEX_C])[Constants.INDEX_B].nunique()
+    unique_bugs = df.reset_index().groupby([FUZZER,TARGET,CAMPAIGN])[BUG_ID].nunique()
     #Unstack and stack back to fill the missing campaign values in case there is
     #not the same number of campaigns for every target/fuzzer.
     #This is needed because the Mann-Whitney U-test requires the same number of
     #samples for both sample sets.
-    unique_bugs = unique_bugs.unstack(Constants.INDEX_C, fill_value=0) \
+    unique_bugs = unique_bugs.unstack(CAMPAIGN, fill_value=0) \
                              .stack(level=0)
 
-    agg = unique_bugs.groupby([Constants.INDEX_F, Constants.INDEX_T]) \
+    agg = unique_bugs.groupby(FEATs_FT) \
                      .apply(lambda d: pd.DataFrame([d.mean(), d.std()],
                                                    index=['Mean', 'Std']) \
                                         .unstack()
                       )
 
-    p_values = unique_bugs.groupby(Constants.INDEX_T) \
+    p_values = unique_bugs.groupby(TARGET) \
                           .apply(lambda d: compute_p_values(
-                                            d.reset_index(Constants.INDEX_T, drop=True)
+                                            d.reset_index(TARGET, drop=True)
                                            )
                            )
 
@@ -177,9 +177,9 @@ def number_of_unique_bugs_found_data(bd):
 
     df = bd.frame
     #Extracting all found bugs
-    df_triggered = df.iloc[df.index.get_level_values(Constants.INDEX_M) == Metric.TRIGGERED.value]
+    df_triggered = df.iloc[df.index.get_level_values(METRIC) == Metric.TRIGGERED.value]
     #Resetting the index is necessary to get the number of unique bugs triggered by each fuzzer
-    num_trigg = df_triggered.reset_index().groupby([Constants.INDEX_F])[Constants.INDEX_B].nunique().to_frame()
+    num_trigg = df_triggered.reset_index().groupby([FUZZER])[BUG_ID].nunique().to_frame()
     num_trigg.columns = ['Bugs']
     return num_trigg
 
@@ -205,12 +205,12 @@ def bug_list(bd,fuzzer,target,metric):
 
     df = bd.get_frame()
     #Extracting the bug fullfilling the metric by putting there metric times into a list
-    df_bugs = df.iloc[df.index.get_level_values(Constants.INDEX_M) == metric]
-    df_bugs = df_bugs.loc[fuzzer,target].groupby(Constants.INDEX_B)['Time'].apply(list)
+    df_bugs = df.iloc[df.index.get_level_values(METRIC) == metric]
+    df_bugs = df_bugs.loc[fuzzer,target].groupby(BUG_ID)[TIME].apply(list)
     #Preparing the new index to be the bugs
     index = df_bugs.index.tolist()
     #Resetting the index and converting the data in the column Time into a new Dataframe
-    d = pd.DataFrame(df_bugs.reset_index()['Time'].to_list(),index = index)
+    d = pd.DataFrame(df_bugs.reset_index()[TIME].to_list(),index = index)
     return d
 
 def line_plot_data(bd,target,metric) :
@@ -234,9 +234,9 @@ def line_plot_data(bd,target,metric) :
         """
 
         #Extracting data for the correct fuzzer
-        df_fuzz = campaigns.iloc[campaigns.index.get_level_values(Constants.INDEX_F) == fuzzer]
+        df_fuzz = campaigns.iloc[campaigns.index.get_level_values(FUZZER) == fuzzer]
 
-        campaigns_data = df_fuzz.groupby([Constants.INDEX_C])['Time'].apply(lambda x : sorted(list(x)))
+        campaigns_data = df_fuzz.groupby([CAMPAIGN])[TIME].apply(lambda x : sorted(list(x)))
         num_campaigns = len(campaigns_data.index)
 
         #The series has the sorted time to metric for every bug as index and as value
@@ -253,19 +253,19 @@ def line_plot_data(bd,target,metric) :
 
 
     df = bd.get_frame()
-    df_metric = df.iloc[df.index.get_level_values(Constants.INDEX_M) == metric]
-    df_lib = df_metric.iloc[df_metric.index.get_level_values(Constants.INDEX_T) == target]
+    df_metric = df.iloc[df.index.get_level_values(METRIC) == metric]
+    df_lib = df_metric.iloc[df_metric.index.get_level_values(TARGET) == target]
 
     #For each unique BugID in each campaign in multiple Programs, only retain the smallest time to metric
-    df_lib = df_lib.groupby(Constants.GROUP_FTCB).min()
+    df_lib = df_lib.groupby(FEATs_FTCB).min()
 
-    x_plot = df_lib.groupby([Constants.INDEX_F])['Time'].apply(lambda x : sorted(set(x))).to_frame()
+    x_plot = df_lib.groupby([FUZZER])[TIME].apply(lambda x : sorted(set(x))).to_frame()
     x_plot.columns = ['x']
     y_plot = x_plot
     index = x_plot.index
     #Resetting index to be able to pass index values as argument
     y_plot = y_plot.reset_index()
-    y_plot = y_plot.apply(lambda f : get_step_value(f[Constants.INDEX_F],f['x'],df_lib),axis=1).to_frame()
+    y_plot = y_plot.apply(lambda f : get_step_value(f[FUZZER],f['x'],df_lib),axis=1).to_frame()
     y_plot.index = index
     y_plot.columns = ['y']
     df_aggplot = x_plot
@@ -290,7 +290,7 @@ def bug_survival_data(bd):
             N = N.loc[(fuzzer, target, program)]
         else:
             N = 1
-        records = group.reset_index(drop=True)['Time'].reindex(np.arange(N))
+        records = group.reset_index(drop=True)[TIME].reindex(np.arange(N))
         T = records.fillna(bd.duration)
         E = records.notnull()
         kmf = KaplanMeierFitter()
@@ -302,47 +302,47 @@ def bug_survival_data(bd):
             target, program, bug = supergroup_name
             fuzzer = group.name
             metrics = set(['reached', 'triggered'])
-            group_metrics = set(group[Constants.INDEX_M].unique())
+            group_metrics = set(group[METRIC].unique())
             for metric in metrics.difference(group_metrics):
                 new_row = pd.DataFrame({
-                    Constants.INDEX_F: fuzzer,
-                    Constants.INDEX_T: target,
-                    Constants.INDEX_P: program,
-                    Constants.INDEX_C: 0,
-                    Constants.INDEX_M: metric,
-                    Constants.INDEX_B: bug
+                    FUZZER: fuzzer,
+                    TARGET: target,
+                    PROGRAM: program,
+                    CAMPAIGN: 0,
+                    METRIC: metric,
+                    BUG_ID: bug
                 }, index=[metric])
                 group = pd.concat([group, new_row], ignore_index=True)
             return group
 
         name = group.name
-        fuzzers = N.index.get_level_values(Constants.INDEX_F).unique()
-        fuzzers_in_group = group[Constants.INDEX_F].unique()
+        fuzzers = N.index.get_level_values(FUZZER).unique()
+        fuzzers_in_group = group[FUZZER].unique()
         for fuzzer in fuzzers:
             if fuzzer in fuzzers_in_group:
                 continue
             # reached bugs
             new_row = pd.DataFrame({
-                    Constants.INDEX_F: fuzzer,
-                    Constants.INDEX_M: 'reached'
-                }, index=[Constants.INDEX_M])
+                    FUZZER: fuzzer,
+                    METRIC: 'reached'
+                }, index=[METRIC])
             group = pd.concat([group, new_row], ignore_index=True)
             # triggered bugs
             new_row = pd.DataFrame({
-                    Constants.INDEX_F: fuzzer,
-                    Constants.INDEX_M: 'triggered'
-                }, index=[Constants.INDEX_M])
+                    FUZZER: fuzzer,
+                    METRIC: 'triggered'
+                }, index=[METRIC])
             group = pd.concat([group, new_row], ignore_index=True)
 
-        group = group.groupby(Constants.INDEX_F, group_keys=False).apply(fillmissing, name).reset_index(drop=True)
+        group = group.groupby(FUZZER, group_keys=False).apply(fillmissing, name).reset_index(drop=True)
 
-        subgroups = group.groupby([Constants.INDEX_F,Constants.INDEX_M]).apply(fit_kmf_one, name, N)
+        subgroups = group.groupby([FUZZER,METRIC]).apply(fit_kmf_one, name, N)
         return subgroups
 
     df = bd.frame
-    N = df.reset_index().groupby(Constants.GROUP_FTP)[Constants.INDEX_C].nunique()
+    N = df.reset_index().groupby(FEATs_FTP)[CAMPAIGN].nunique()
     kmf = df.reset_index() \
-            .groupby([Constants.INDEX_T, Constants.INDEX_P, Constants.INDEX_B]) \
+            .groupby([TARGET, PROGRAM, BUG_ID]) \
             .apply(fit_kmf_all, N)
 
     # get the mean survival time for every (target, program, bug, fuzzer, metric) tuple
@@ -350,8 +350,8 @@ def bug_survival_data(bd):
     # re-arrange the dataframe such that the columns are the metrics
     means = means.stack(level=0)
     # for every (target, bug, fuzzer) tuple, select the row corresponding to the program where the bug was triggered earliest
-    means = means.loc[means.groupby([Constants.INDEX_T, Constants.INDEX_B, Constants.INDEX_F])[Metric.TRIGGERED.value].idxmin()]
+    means = means.loc[means.groupby([TARGET, BUG_ID, FUZZER])[Metric.TRIGGERED.value].idxmin()]
     # re-arrange dataframe so that index is (target, bug) and columns are (fuzzer, metric)
-    means = means.droplevel(Constants.INDEX_P).stack().unstack(-2).unstack()
+    means = means.droplevel(PROGRAM).stack().unstack(-2).unstack()
 
     return kmf, means

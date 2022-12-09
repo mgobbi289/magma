@@ -14,6 +14,7 @@ import DataProcessing
 from Metric import Metric
 from BenchmarkData import BenchmarkData
 import Constants
+from Features import *
 
 
 def expected_time_to_trigger(bd, outdir):
@@ -30,7 +31,7 @@ def expected_time_to_trigger(bd, outdir):
     #Compute the order of the fuzzer that found the most bugs in descending order
     fuzzer_order = DataProcessing.number_of_unique_bugs_found_data(bd)
     fuzzer_order = fuzzer_order.sort_values(by=['Bugs'],ascending = False) \
-                               .reset_index()['Fuzzer'].tolist()
+                               .reset_index()[FUZZER].tolist()
 
     #Sort the bug by aggregate time
     ett['Aggregate'] = agg
@@ -53,7 +54,7 @@ def expected_time_to_trigger(bd, outdir):
                             norm=colors.PowerNorm(gamma=0.32),
                             ax=ax)
     #Color bar properties
-    max_num_trials = bd.frame.reset_index().groupby('Fuzzer')['Campaign'] \
+    max_num_trials = bd.frame.reset_index().groupby(FUZZER)[CAMPAIGN] \
                        .nunique().max()
     xticks = list_ticks(bd.duration * max_num_trials)[4:]
     xticklables = list(map(lambda x: pp_time(x), xticks))
@@ -90,8 +91,8 @@ def unique_bugs_per_target(bd, outdir, metric, libraries=None, symmetric=False, 
     all_libraries = bd.get_all_targets()
     if libraries :
         drop_libraries = set(all_libraries).difference(libraries)
-        unique_bugs.drop(level='Target', labels=drop_libraries, inplace=True)
-        p_values.drop(level='Target', labels=drop_libraries, inplace=True)
+        unique_bugs.drop(level=TARGET, labels=drop_libraries, inplace=True)
+        p_values.drop(level=TARGET, labels=drop_libraries, inplace=True)
     else:
         libraries = all_libraries
 
@@ -99,7 +100,7 @@ def unique_bugs_per_target(bd, outdir, metric, libraries=None, symmetric=False, 
     fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(12, 12), squeeze=False)
 
     for target, ax in zip(libraries, axs.flat):
-        lib_data = p_values.xs(target, level='Target', drop_level=True)
+        lib_data = p_values.xs(target, level=TARGET, drop_level=True)
         # maintain symmetry by removing "extra" fuzzers
         lib_data = lib_data.transpose().reindex(lib_data.index)
 
@@ -116,11 +117,11 @@ def unique_bugs_per_target(bd, outdir, metric, libraries=None, symmetric=False, 
     fig.savefig(path, bbox_inches='tight')
 
     fig, ax = plt.subplots(figsize=(12, 6))
-    unique_bugs.groupby(['Fuzzer','Target']) \
+    unique_bugs.groupby(FEATs_FT) \
                .mean().unstack(0) \
                .plot.bar(width=0.8,
                          ax=ax,
-                         yerr=unique_bugs.groupby(['Fuzzer','Target']) \
+                         yerr=unique_bugs.groupby(FEATs_FT) \
                                          .std().unstack(0)
                 )
     ax.legend(loc='upper left', bbox_to_anchor=(1,1))
@@ -153,7 +154,7 @@ def bug_metric_boxplot(bd, outdir):
 
     def plot_boxes(df):
         fuzzer, target, program, metric = df.name
-        df = df.unstack('BugID')
+        df = df.unstack(BUG_ID)
         df = df.droplevel(level=0, axis='columns')
 
         fig, ax = plt.subplots(figsize=(8,5))
@@ -175,7 +176,7 @@ def bug_metric_boxplot(bd, outdir):
         return name
 
     df = bd.frame
-    outfiles = df.groupby(['Fuzzer', 'Target', 'Program', 'Metric']) \
+    outfiles = df.groupby([FUZZER, TARGET, PROGRAM, METRIC]) \
                  .apply(plot_boxes)
 
     return outfiles
@@ -291,9 +292,9 @@ def bug_survival_plots(bd, outdir):
         return color_df
 
     # adjust dataframe for better presentation
-    means = means.droplevel('Target')
+    means = means.droplevel(TARGET)
 
-    agg = means.stack(0).groupby('BugID') \
+    agg = means.stack(0).groupby(BUG_ID) \
                         .apply(lambda x: pd.Series(
                             {
                                 Metric.REACHED.value:   x[Metric.REACHED.value].mean(),
@@ -305,7 +306,7 @@ def bug_survival_plots(bd, outdir):
 
     means = means.stack() \
                  .sort_values(
-                    by='Fuzzer',
+                    by=FUZZER,
                     ascending=False,
                     axis='columns',
                     key=lambda idx: [means[(f, Metric.TRIGGERED.value)][means[(f, Metric.TRIGGERED.value)] < bd.duration].count() for f in idx]) \

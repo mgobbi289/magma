@@ -5,6 +5,7 @@ import pandas as pd
 from pandas import DataFrame
 from collections import Mapping, Iterable
 import Constants
+from Features import *
 
 
 # TODO add retrieval of experiment information (Campaign duration)
@@ -59,9 +60,9 @@ class BenchmarkData:
         df = DataFrame.from_dict(flatten_dict(json_data['results']))
         df = df.transpose()
         # change column label from range to regular index
-        df.rename(columns={0: 'Time'}, inplace=True)
+        df.rename(columns={0: TIME}, inplace=True)
         # change index names
-        df.rename_axis(index=Constants.INDEX_NAMES, inplace=True)
+        df.rename_axis(index=ALL_FEATs, inplace=True)
         # sorting for later performance gain
         self._df = df.sort_index()
 
@@ -86,10 +87,10 @@ class BenchmarkData:
         return self._version
 
     def get_all_fuzzers(self):
-        return list(self._df.index.get_level_values(Constants.INDEX_F).unique())
+        return list(self._df.index.get_level_values(FUZZER).unique())
 
     def get_all_targets(self):
-        return list(self._df.index.get_level_values(Constants.INDEX_T).unique())
+        return list(self._df.index.get_level_values(TARGET).unique())
 
     def get_all_metrics(self):
-        return list(self._df.index.get_level_values(Constants.INDEX_M).unique())
+        return list(self._df.index.get_level_values(METRIC).unique())
